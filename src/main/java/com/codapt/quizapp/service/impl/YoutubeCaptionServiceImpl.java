@@ -32,7 +32,6 @@ public class YoutubeCaptionServiceImpl implements YoutubeCaptionService {
     public YoutubeCaptionDetails downloadCaptions(String youtubeUrl) throws Exception {
         logger.info("Starting caption download for YouTube URL: {}", youtubeUrl);
 
-        // Load yt-dlp from resources
         ClassPathResource resource = new ClassPathResource("yt-dlp.exe");
         File exeFile = File.createTempFile("yt-dlp", ".exe");
 
@@ -44,7 +43,6 @@ public class YoutubeCaptionServiceImpl implements YoutubeCaptionService {
         exeFile.setExecutable(true);
         logger.debug("yt-dlp executable prepared at: {}", exeFile.getAbsolutePath());
 
-        // Run yt-dlp --dump-json
         ProcessBuilder pb = new ProcessBuilder(
                 exeFile.getAbsolutePath(),
                 "--dump-json",
