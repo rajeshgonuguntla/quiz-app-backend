@@ -1,0 +1,218 @@
+================================================================================
+PLAYLIST SUPPORT - TECHNICAL DESIGN DOCUMENT
+Quiz App Backend
+Date: 2026-03-24
+Author: Rajesh Gonuguntla
+================================================================================
+
+
+1. OVERVIEW
+-----------
+Currently the app accepts a single YouTube video URL and returns one quiz.
+This document describes the design for extending the app to accept a YouTube
+playlist URL and return one quiz per video in the playlist.
+
+The existing single-video flow is unchanged. Playlist support is additive.
+
+
+2. CURRENT SINGLE-VIDEO FLOW
+-----------------------------
+
+  Client
+    |
+    | POST /api/quiz/generate
+    | { "youtubeUrl": "https://youtube.com/watch?v=ABC" }
+    v
+  QuizController.generateQuiz()
+    |
+    | calls
+    v
+  YoutubeCaptionServiceImpl.downloadCaptions(url)
+    |  - Extracts yt-dlp.exe from classpath to a temp file
+    |  - Runs: yt-dlp --dump-json <url>
+    |  - Parses JSON: title, channel, duration, subtitle URL
+    |  - If subtitle URL found: downloads VTT, cleans it
+    |  - If not: falls back to YoutubeTranscriptApi (java library)
+    |  - Returns: YoutubeCaptionDetails { caption, videoTitle, channelName, videoLength }
+    v
+  GeminiServiceImpl.getQuizFromGemini(captions)
+    |  - Fills prompt template with transcript text
+    |  - Sends to Gemini (gemini-2.0-flash via Spring AI)
+    |  - Returns: JSON string (quiz)
+    v
+  YoutubeQuizResponse { caption, quiz, videoTitle, channelName, videoLength }
+    |
+    v
+  Client receives one quiz
+
+
+3. PROPOSED PLAYLIST FLOW
+--------------------------
+
+  Client
+    |
+    | POST /api/quiz/generate-playlist
+    | { "playlistUrl": "https://youtube.com/playlist?list=XYZ" }
+    v
+  QuizController.generatePlaylistQuiz()  [NEW]
+    |
+    | calls
+    v
+  YoutubePlaylistService.getVideoUrls(playlistUrl)  [NEW]
+    |  - Runs: yt-dlp --flat-playlist --dump-json <playlistUrl>
+    |  - Parses each line of output as a JSON object
+    |  - Extracts video ID from each entry
+    |  - Returns: List<String> of full video URLs
+    |    e.g. ["https://youtube.com/watch?v=A", "https://youtube.com/watch?v=B", ...]
+    v
+  For each video URL (loop):
+    |
+    | calls existing pipeline
+    v
+  YoutubeCaptionServiceImpl.downloadCaptions(videoUrl)  [EXISTING - unchanged]
+    v
+  GeminiServiceImpl.getQuizFromGemini(captions)  [EXISTING - unchanged]
+    v
+  YoutubeQuizResponse per video  [EXISTING - unchanged]
+    |
+    v
+  YoutubePlaylistQuizResponse { playlistUrl, quizzes: List<YoutubeQuizResponse> }  [NEW]
+    |
+    v
+  Client receives N quizzes (one per video)
+
+
+4. NEW FILES TO CREATE
+-----------------------
+
+  a) src/main/java/com/codapt/quizapp/service/YoutubePlaylistService.java
+     - Interface with one method:
+         List<String> getVideoUrls(String playlistUrl) throws Exception;
+
+  b) src/main/java/com/codapt/quizapp/service/impl/YoutubePlaylistServiceImpl.java
+     - Extracts yt-dlp.exe from classpath (same as YoutubeCaptionServiceImpl)
+     - Runs: yt-dlp --flat-playlist --dump-json <playlistUrl>
+     - Each line of stdout is a JSON object for one video
+     - Extracts "id" field from each, builds full YouTube watch URL
+     - Returns the list
+
+  c) src/main/java/com/codapt/quizapp/dto/YoutubePlaylistQuizRequest.java
+     - Fields:
+         String playlistUrl
+
+  d) src/main/java/com/codapt/quizapp/dto/YoutubePlaylistQuizResponse.java
+     - Fields:
+         String playlistUrl
+         List<YoutubeQuizResponse> quizzes
+
+
+5. FILES TO MODIFY
+-------------------
+
+  a) QuizController.java
+     - Add new endpoint:
+         POST /api/quiz/generate-playlist
+     - Accepts: YoutubePlaylistQuizRequest
+     - Calls: YoutubePlaylistService.getVideoUrls()
+     - Loops over URLs, calls existing caption + Gemini pipeline for each
+     - Returns: YoutubePlaylistQuizResponse
+
+     NOTE: No changes to the existing generateQuiz() method.
+
+
+6. WHAT DOES NOT CHANGE
+------------------------
+
+  - YoutubeCaptionService (interface)
+  - YoutubeCaptionServiceImpl (implementation)
+  - GeminiService (interface)
+  - GeminiServiceImpl (implementation)
+  - YoutubeQuizRequest
+  - YoutubeQuizResponse
+  - YoutubeCaptionDetails
+  - All auth, security, JWT logic
+  - POST /api/quiz/generate (existing endpoint)
+
+
+7. TECHNICAL NOTES
+-------------------
+
+  yt-dlp flat-playlist command:
+    yt-dlp --flat-playlist --dump-json <playlistUrl>
+    - Outputs one JSON object per line (not a JSON array)
+    - Each object has an "id" field (YouTube video ID)
+    - Does NOT download any video — metadata only, fast
+
+  Playlist URL format accepted:
+    https://www.youtube.com/playlist?list=PLxxxxxxxx
+
+  Built video URL from ID:
+    https://www.youtube.com/watch?v=<id>
+
+  Error handling approach:
+    - If one video in the playlist fails (no captions, Gemini error),
+      skip it and continue processing remaining videos.
+      Log the failure with the video URL.
+    - Return only the successfully generated quizzes.
+
+  Performance note:
+    - Videos are processed sequentially (one at a time)
+    - Large playlists will take proportionally longer
+    - Future improvement: process in parallel using CompletableFuture
+
+
+8. API CONTRACT
+----------------
+
+  Request:
+    POST /api/quiz/generate-playlist
+    Content-Type: application/json
+    Authorization: Bearer <jwt>
+
+    {
+      "playlistUrl": "https://www.youtube.com/playlist?list=PLxxxxxxxx"
+    }
+
+  Response:
+    HTTP 200 OK
+    Content-Type: application/json
+
+    {
+      "playlistUrl": "https://www.youtube.com/playlist?list=PLxxxxxxxx",
+      "quizzes": [
+        {
+          "caption": "...",
+          "quiz": "{ \"title\": \"...\", \"questions\": [...] }",
+          "videoTitle": "Video One Title",
+          "channelName": "Channel Name",
+          "videoLength": "12:34"
+        },
+        {
+          "caption": "...",
+          "quiz": "{ \"title\": \"...\", \"questions\": [...] }",
+          "videoTitle": "Video Two Title",
+          "channelName": "Channel Name",
+          "videoLength": "08:21"
+        }
+      ]
+    }
+
+
+9. OPEN QUESTIONS FOR SENIOR DEV REVIEW
+-----------------------------------------
+
+  1. Should we cap the number of videos per playlist (e.g. max 20)?
+     Large playlists could cause very long response times or Gemini rate limits.
+
+  2. Should failed videos be included in the response with an error message,
+     or silently skipped?
+
+  3. Should the playlist endpoint be async (return a job ID immediately,
+     poll for results) given it could take minutes for large playlists?
+
+  4. Should the playlist title be included in the response?
+     yt-dlp can provide it but requires a separate call.
+
+================================================================================
+END OF DOCUMENT
+================================================================================
