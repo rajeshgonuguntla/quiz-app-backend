@@ -35,7 +35,7 @@ public class SecurityConfiguration {
                         .allowedHeaders("*")
                         .allowCredentials(true)
                         .maxAge(3600)
-                        .allowedOrigins("http://localhost:5173", "http://localhost:3000");
+                        .allowedOrigins("http://localhost:5173", "http://localhost:3000", "https://quibapp-944587700647.europe-west1.run.app");
             }
         };
     }
