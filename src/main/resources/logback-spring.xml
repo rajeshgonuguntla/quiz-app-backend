@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <springProperty scope="context" name="appName" source="spring.application.name" defaultValue="quiz-app"/>
+
+    <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <timeZone>UTC</timeZone>
+            <customFields>{"service":"${appName}"}</customFields>
+            <fieldNames>
+                <timestamp>timestamp</timestamp>
+                <level>severity</level>
+                <logger>logger</logger>
+                <thread>thread</thread>
+                <stackTrace>stack_trace</stackTrace>
+            </fieldNames>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="JSON_CONSOLE"/>
+    </root>
+</configuration>
+

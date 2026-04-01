@@ -20,9 +20,12 @@ import java.util.List;
 public class SecurityConfiguration {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final TraceCorrelationFilter traceCorrelationFilter;
 
-    public SecurityConfiguration(JwtAuthenticationFilter jwtAuthenticationFilter) {
+    public SecurityConfiguration(JwtAuthenticationFilter jwtAuthenticationFilter,
+                                 TraceCorrelationFilter traceCorrelationFilter) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.traceCorrelationFilter = traceCorrelationFilter;
     }
 
     @Bean
@@ -51,7 +54,8 @@ public class SecurityConfiguration {
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                         .anyRequest().authenticated())
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(traceCorrelationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(jwtAuthenticationFilter, TraceCorrelationFilter.class);
 
         return http.build();
     }

@@ -22,6 +22,9 @@ File: `src/main/resources/application.properties`
 - `jwt.secret` (Base64-encoded secret)
 - `jwt.expiration-ms`
 
+## Cloud Run Logging
+- `gcp.project-id` (defaults from `GOOGLE_CLOUD_PROJECT`)
+
 ---
 
 ## 2) Security and Authorization Flow
@@ -58,6 +61,21 @@ Global handling lives in `src/main/java/com/codapt/quizapp/controller/GlobalExce
 ---
 
 ## 4) Logging Strategy
+
+Logs are emitted in JSON to stdout using `src/main/resources/logback-spring.xml`, which is the format expected by Cloud Logging on Cloud Run.
+
+## Cloud Run fields
+- `severity`
+- `message`
+- `timestamp`
+- `logging.googleapis.com/trace`
+- `logging.googleapis.com/spanId`
+- `logging.googleapis.com/trace_sampled`
+
+## Request trace correlation
+- `TraceCorrelationFilter` reads `X-Cloud-Trace-Context`.
+- The filter writes trace/span values into MDC before request processing.
+- `SecurityConfiguration` places this filter before JWT auth filter so downstream logs include trace context.
 
 ## Controller logs
 - Request receipt and key progress markers.
