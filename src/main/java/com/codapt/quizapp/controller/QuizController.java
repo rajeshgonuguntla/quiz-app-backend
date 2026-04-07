@@ -17,8 +17,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.StringJoiner;
 
 @RestController
 @RequestMapping("/api/quiz")
@@ -67,13 +67,23 @@ public class QuizController {
         String quiz = geminiService.getQuizFromGemini(captionDetails.getCaption());
         logger.debug("Successfully generated quiz for URL: {}", url);
 
-        logger.info("Quiz generation completed successfully for URL: {}", url);
-        return new YoutubeQuizResponse(
+        YoutubeQuizResponse response = new YoutubeQuizResponse(
                 captionDetails.getCaption(),
                 quiz,
                 captionDetails.getVideoTitle(),
                 captionDetails.getChannelName(),
                 captionDetails.getVideoLength());
+
+        logger.info("Quiz generation completed successfully for URL: {}", url);
+        logger.info("Response - videoTitle: '{}', channelName: '{}', videoLength: '{}', captionLength: {} chars, quizLength: {} chars",
+                response.getVideoTitle(),
+                response.getChannelName(),
+                response.getVideoLength(),
+                response.getCaption() != null ? response.getCaption().length() : 0,
+                response.getQuiz() != null ? response.getQuiz().length() : 0);
+        logger.debug("Full response: {}", response);
+
+        return response;
     }
 
     @PostMapping("/generate-playlist")
@@ -101,28 +111,55 @@ public class QuizController {
             throw new RuntimeException("No videos found in the provided playlist URL");
         }
 
-        List<YoutubeQuizResponse> quizzes = new ArrayList<>();
+        StringJoiner combinedCaptions = new StringJoiner("\n\n");
+        StringJoiner combinedTitles = new StringJoiner(", ");
+        StringJoiner combinedLengths = new StringJoiner(", ");
+        String channelName = "";
+        int successCount = 0;
 
         for (String videoUrl : videoUrls) {
             try {
                 logger.info("Processing video: {}", videoUrl);
                 YoutubeCaptionDetails captionDetails = youtubeCaptionService.downloadCaptions(videoUrl);
-                String quiz = geminiService.getQuizFromGemini(captionDetails.getCaption());
-                quizzes.add(new YoutubeQuizResponse(
-                        captionDetails.getCaption(),
-                        quiz,
-                        captionDetails.getVideoTitle(),
-                        captionDetails.getChannelName(),
-                        captionDetails.getVideoLength()));
-                logger.info("Quiz generated for video: {}", videoUrl);
+                combinedCaptions.add(captionDetails.getCaption());
+                combinedTitles.add(captionDetails.getVideoTitle());
+                combinedLengths.add(captionDetails.getVideoLength());
+                if (channelName.isEmpty() && captionDetails.getChannelName() != null) {
+                    channelName = captionDetails.getChannelName();
+                }
+                successCount++;
+                logger.info("Captions downloaded for video: {}", videoUrl);
             } catch (Exception e) {
-                logger.error("Failed to generate quiz for video {}, skipping: {}", videoUrl, e.getMessage());
+                logger.error("Failed to download captions for video {}, skipping: {}", videoUrl, e.getMessage());
             }
         }
 
-        logger.info("Playlist processing complete. Generated {}/{} quizzes for playlist: {}",
-                quizzes.size(), videoUrls.size(), playlistUrl);
+        if (successCount == 0) {
+            throw new RuntimeException("Failed to download captions for any video in the playlist");
+        }
 
-        return new YoutubePlaylistQuizResponse(playlistUrl, quizzes);
+        String allCaptions = combinedCaptions.toString();
+        logger.info("Generating combined quiz from {}/{} videos for playlist: {}", successCount, videoUrls.size(), playlistUrl);
+        String quiz = geminiService.getQuizFromGemini(allCaptions);
+
+        YoutubePlaylistQuizResponse response = new YoutubePlaylistQuizResponse(
+                playlistUrl,
+                allCaptions,
+                quiz,
+                combinedTitles.toString(),
+                channelName,
+                combinedLengths.toString());
+
+        logger.info("Playlist processing complete. Processed {}/{} videos for playlist: {}",
+                successCount, videoUrls.size(), playlistUrl);
+        logger.info("Response - videoTitle: '{}', channelName: '{}', videoLength: '{}', captionLength: {} chars, quizLength: {} chars",
+                response.getVideoTitle(),
+                response.getChannelName(),
+                response.getVideoLength(),
+                response.getCaption() != null ? response.getCaption().length() : 0,
+                response.getQuiz() != null ? response.getQuiz().length() : 0);
+        logger.debug("Full response: {}", response);
+
+        return response;
     }
 }

@@ -4,12 +4,14 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.List;
-
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
 public class YoutubePlaylistQuizResponse {
     private String playlistUrl;
-    private List<YoutubeQuizResponse> quizzes;
+    private String caption;
+    private String quiz;
+    private String videoTitle;
+    private String channelName;
+    private String videoLength;
 }

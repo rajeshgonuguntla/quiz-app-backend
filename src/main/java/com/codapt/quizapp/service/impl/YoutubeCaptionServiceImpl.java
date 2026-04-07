@@ -7,26 +7,30 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.thoroldvix.api.TranscriptContent;
 import io.github.thoroldvix.api.TranscriptApiFactory;
 import io.github.thoroldvix.api.YoutubeTranscriptApi;
+import okhttp3.Request;
+import org.apache.http.HttpHost;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.net.URI;
-import java.net.URLDecoder;
+import java.io.*;
+import java.net.*;
+import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 
 @Service
 public class YoutubeCaptionServiceImpl implements YoutubeCaptionService {
 
     private static final Logger logger = LoggerFactory.getLogger(YoutubeCaptionServiceImpl.class);
+    private final String webshareUser = System.getenv("WEBSHARE_USERNAME");
+    private final String websharePass = System.getenv("WEBSHARE_PASSWORD");
+    private final String webshareHost = defaultIfBlank(System.getenv("WEBSHARE_PROXY_HOST"), "p.webshare.io");
+    private final String websharePort = defaultIfBlank(System.getenv("WEBSHARE_PROXY_PORT"), "80");
 
     @Override
     public YoutubeCaptionDetails downloadCaptions(String youtubeUrl) throws Exception {
@@ -34,42 +38,64 @@ public class YoutubeCaptionServiceImpl implements YoutubeCaptionService {
 
         ClassPathResource resource = new ClassPathResource("yt-dlp.exe");
         File exeFile = File.createTempFile("yt-dlp", ".exe");
+        exeFile.deleteOnExit();
 
         try (InputStream in = resource.getInputStream();
              OutputStream out = new FileOutputStream(exeFile)) {
             in.transferTo(out);
         }
 
-        exeFile.setExecutable(true);
+        boolean executableSet = exeFile.setExecutable(true);
+        if (!executableSet) {
+            logger.warn("Could not mark temporary yt-dlp executable as executable: {}", exeFile.getAbsolutePath());
+        }
         logger.debug("yt-dlp executable prepared at: {}", exeFile.getAbsolutePath());
 
-        ProcessBuilder pb = new ProcessBuilder(
-                exeFile.getAbsolutePath(),
-                "--dump-json",
-                youtubeUrl
-        );
+        //String proxyUrl = resolveYtDlpProxyUrl();
 
-        Process process = pb.start();
-        logger.debug("yt-dlp process started for URL: {}", youtubeUrl);
+        HttpClient client = HttpClient.newBuilder()
+                .proxy(ProxySelector.of(new InetSocketAddress("gate.decodo.com", 7000)))
+                .authenticator(new Authenticator() {
+                    @Override
+                    protected PasswordAuthentication getPasswordAuthentication() {
+                        return new PasswordAuthentication(
+                                "your_proxy_username",
+                                "your_proxy_password".toCharArray()
+                        );
+                    }
+                })
+                .build();
 
-        StringBuilder json = new StringBuilder();
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                json.append(line);
+        String proxyUrl= "http://spt3g2wopk:eX3oNX6qdb_ri2k4nJ@gate.decodo.com:7000";
+
+
+
+        YtDlpExecutionResult result;
+
+        if (proxyUrl != null) {
+            logger.info("Using proxy for yt-dlp request");
+            result = executeYtDlp(buildYtDlpCommand(exeFile, youtubeUrl, proxyUrl));
+            if (result.exitCode() != 0) {
+                if (logger.isWarnEnabled()) {
+                    logger.warn("yt-dlp failed via proxy (exit code {}). Retrying without proxy once. Output: {}",
+                            result.exitCode(), summarizeYtDlpOutput(result.stderr()));
+                }
+                result = executeYtDlp(buildYtDlpCommand(exeFile, youtubeUrl, null));
             }
+        } else {
+            logger.warn("No proxy configured for yt-dlp. Direct request will be attempted.");
+            result = executeYtDlp(buildYtDlpCommand(exeFile, youtubeUrl, null));
         }
 
-        int exitCode = process.waitFor();
-        logger.debug("yt-dlp process completed with exit code: {}", exitCode);
-
-        if (exitCode != 0) {
-            logger.error("yt-dlp failed with exit code: {}", exitCode);
-            throw new RuntimeException("Failed to retrieve video information from yt-dlp");
+        if (result.exitCode() != 0) {
+            if (logger.isErrorEnabled()) {
+                logger.error("yt-dlp failed with exit code {}. Output: {}", result.exitCode(), summarizeYtDlpOutput(result.stderr()));
+            }
+            throw new IllegalStateException("Failed to retrieve video information from yt-dlp (exit=" + result.exitCode() + ")");
         }
 
         ObjectMapper mapper = new ObjectMapper();
-        JsonNode root = mapper.readTree(json.toString());
+        JsonNode root = mapper.readTree(extractJsonPayload(result.stdout()));
 
         String videoTitle = root.path("title").asText("Unknown title");
         String channelName = root.path("channel").asText("Unknown channel");
@@ -213,6 +239,130 @@ public class YoutubeCaptionServiceImpl implements YoutubeCaptionService {
         }
 
         return id.isEmpty() ? null : id;
+    }
+
+    private String resolveYtDlpProxyUrl() {
+        String explicitProxy = trimToNull(System.getenv("YTDLP_PROXY_URL"));
+        if (explicitProxy != null) {
+            return explicitProxy;
+        }
+
+        String httpsProxy = trimToNull(System.getenv("HTTPS_PROXY"));
+        if (httpsProxy != null) {
+            return httpsProxy;
+        }
+
+        String httpProxy = trimToNull(System.getenv("HTTP_PROXY"));
+        if (httpProxy != null) {
+            return httpProxy;
+        }
+
+        if (webshareUser != null && !webshareUser.isBlank() && websharePass != null && !websharePass.isBlank()) {
+            String encodedUser = URLEncoder.encode(webshareUser, StandardCharsets.UTF_8);
+            String encodedPass = URLEncoder.encode(websharePass, StandardCharsets.UTF_8);
+            return String.format("http://%s:%s@%s:%s", encodedUser, encodedPass, webshareHost, websharePort);
+        }
+
+        return null;
+    }
+
+    private String defaultIfBlank(String value, String defaultValue) {
+        String normalized = trimToNull(value);
+        return normalized == null ? defaultValue : normalized;
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private List<String> buildYtDlpCommand(File exeFile, String youtubeUrl, String proxyUrl) {
+        List<String> command = new ArrayList<>();
+        command.add(exeFile.getAbsolutePath());
+        if (proxyUrl != null) {
+            command.add("--proxy");
+            command.add(proxyUrl);
+        }
+        command.add("--dump-json");
+        command.add(youtubeUrl);
+        return command;
+    }
+
+    private YtDlpExecutionResult executeYtDlp(List<String> command) throws IOException, InterruptedException {
+        ProcessBuilder pb = new ProcessBuilder(command);
+
+        Process process = pb.start();
+
+        CompletableFuture<String> stdoutFuture = CompletableFuture.supplyAsync(() -> readStream(process.getInputStream()));
+        CompletableFuture<String> stderrFuture = CompletableFuture.supplyAsync(() -> readStream(process.getErrorStream()));
+
+        int exitCode = process.waitFor();
+        try {
+            String stdout = stdoutFuture.get();
+            String stderr = stderrFuture.get();
+            return new YtDlpExecutionResult(exitCode, stdout, stderr);
+        } catch (Exception ex) {
+            logger.warn("Error reading yt-dlp streams", ex);
+            return new YtDlpExecutionResult(exitCode, "", "");
+        }
+    }
+
+    private String readStream(InputStream inputStream) {
+        StringBuilder output = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                output.append(line).append("\n");
+            }
+        } catch (Exception ex) {
+            logger.warn("Failed to read process stream", ex);
+        }
+        return output.toString();
+    }
+
+    private String extractJsonPayload(String stdout) {
+        if (stdout == null || stdout.isBlank()) {
+            throw new IllegalStateException("yt-dlp did not produce JSON output");
+        }
+
+        String trimmed = stdout.trim();
+        if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+            return trimmed;
+        }
+
+        for (String line : trimmed.split("\\R")) {
+            String candidate = line.trim();
+            if (candidate.startsWith("{") && candidate.endsWith("}")) {
+                return candidate;
+            }
+        }
+
+        throw new IllegalStateException("yt-dlp output did not contain JSON payload");
+    }
+
+    private String summarizeYtDlpOutput(String output) {
+        if (output == null) {
+            return "<empty>";
+        }
+
+        String normalized = output.trim();
+        if (normalized.isEmpty()) {
+            return "<empty>";
+        }
+
+        int maxLength = 500;
+        if (normalized.length() <= maxLength) {
+            return normalized;
+        }
+
+        return normalized.substring(0, maxLength) + "...";
+    }
+
+    private record YtDlpExecutionResult(int exitCode, String stdout, String stderr) {
     }
 
     private String formatDuration(long durationSeconds) {
