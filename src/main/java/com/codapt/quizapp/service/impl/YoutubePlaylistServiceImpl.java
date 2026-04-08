@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.core.io.ClassPathResource;
+// ...existing code...
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
@@ -26,22 +26,25 @@ public class YoutubePlaylistServiceImpl implements YoutubePlaylistService {
     public List<String> getVideoUrls(String playlistUrl) throws Exception {
         logger.info("Extracting video URLs from playlist: {}", playlistUrl);
 
-        ClassPathResource resource = new ClassPathResource("yt-dlp.exe");
-        File exeFile = File.createTempFile("yt-dlp", ".exe");
-
-        try (InputStream in = resource.getInputStream();
-             OutputStream out = new FileOutputStream(exeFile)) {
-            in.transferTo(out);
+        // Use system-installed yt-dlp (or command specified by YTDLP_CMD)
+        String ytDlpCmd = System.getenv("YTDLP_CMD");
+        if (ytDlpCmd == null || ytDlpCmd.trim().isEmpty()) {
+            ytDlpCmd = "yt-dlp";
         }
 
-        exeFile.setExecutable(true);
+        String proxy = resolveProxyFromEnv();
 
-        ProcessBuilder pb = new ProcessBuilder(
-                exeFile.getAbsolutePath(),
-                "--flat-playlist",
-                "--dump-json",
-                playlistUrl
-        );
+        List<String> cmd = new ArrayList<>();
+        cmd.add(ytDlpCmd);
+        if (proxy != null) {
+            cmd.add("--proxy");
+            cmd.add(proxy);
+        }
+        cmd.add("--flat-playlist");
+        cmd.add("--dump-json");
+        cmd.add(playlistUrl);
+
+        ProcessBuilder pb = new ProcessBuilder(cmd);
 
         Process process = pb.start();
 
@@ -73,5 +76,15 @@ public class YoutubePlaylistServiceImpl implements YoutubePlaylistService {
 
         logger.info("Found {} videos in playlist: {}", videoUrls.size(), playlistUrl);
         return videoUrls;
+    }
+
+    private String resolveProxyFromEnv() {
+        String p = System.getenv("YTDLP_PROXY_URL");
+        if (p != null && !p.isBlank()) return p;
+        p = System.getenv("HTTPS_PROXY");
+        if (p != null && !p.isBlank()) return p;
+        p = System.getenv("HTTP_PROXY");
+        if (p != null && !p.isBlank()) return p;
+        return null;
     }
 }

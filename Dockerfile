@@ -10,6 +10,13 @@ RUN chmod +x mvnw && ./mvnw -q clean package -DskipTests
 
 # Runtime stage
 FROM eclipse-temurin:21-jre
+
+# Install python + yt-dlp
+RUN apt-get update && \
+    apt-get install -y python3 python3-pip ffmpeg && \
+    pip3 install yt-dlp && \
+    apt-get clean
+
 WORKDIR /app
 
 # Copy fat jar from builder

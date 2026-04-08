@@ -7,16 +7,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.thoroldvix.api.TranscriptContent;
 import io.github.thoroldvix.api.TranscriptApiFactory;
 import io.github.thoroldvix.api.YoutubeTranscriptApi;
-import okhttp3.Request;
-import org.apache.http.HttpHost;
+// ...existing code...
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.core.io.ClassPathResource;
+// ...existing code...
 import org.springframework.stereotype.Service;
 
 import java.io.*;
 import java.net.*;
-import java.net.http.HttpClient;
+// ...existing code...
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -36,55 +35,29 @@ public class YoutubeCaptionServiceImpl implements YoutubeCaptionService {
     public YoutubeCaptionDetails downloadCaptions(String youtubeUrl) throws Exception {
         logger.info("Starting caption download for YouTube URL: {}", youtubeUrl);
 
-        ClassPathResource resource = new ClassPathResource("yt-dlp.exe");
-        File exeFile = File.createTempFile("yt-dlp", ".exe");
-        exeFile.deleteOnExit();
-
-        try (InputStream in = resource.getInputStream();
-             OutputStream out = new FileOutputStream(exeFile)) {
-            in.transferTo(out);
+        // Determine the yt-dlp command to use. In Docker the image installs yt-dlp on PATH.
+        String ytDlpCmd = trimToNull(System.getenv("YTDLP_CMD"));
+        if (ytDlpCmd == null) {
+            ytDlpCmd = "yt-dlp";
         }
 
-        boolean executableSet = exeFile.setExecutable(true);
-        if (!executableSet) {
-            logger.warn("Could not mark temporary yt-dlp executable as executable: {}", exeFile.getAbsolutePath());
-        }
-        logger.debug("yt-dlp executable prepared at: {}", exeFile.getAbsolutePath());
-
-        //String proxyUrl = resolveYtDlpProxyUrl();
-
-        HttpClient client = HttpClient.newBuilder()
-                .proxy(ProxySelector.of(new InetSocketAddress("gate.decodo.com", 7000)))
-                .authenticator(new Authenticator() {
-                    @Override
-                    protected PasswordAuthentication getPasswordAuthentication() {
-                        return new PasswordAuthentication(
-                                "your_proxy_username",
-                                "your_proxy_password".toCharArray()
-                        );
-                    }
-                })
-                .build();
-
-        String proxyUrl= "http://spt3g2wopk:eX3oNX6qdb_ri2k4nJ@gate.decodo.com:7000";
-
-
+        String proxyUrl = resolveYtDlpProxyUrl();
 
         YtDlpExecutionResult result;
 
         if (proxyUrl != null) {
             logger.info("Using proxy for yt-dlp request");
-            result = executeYtDlp(buildYtDlpCommand(exeFile, youtubeUrl, proxyUrl));
+            result = executeYtDlp(buildYtDlpCommand(ytDlpCmd, youtubeUrl, proxyUrl));
             if (result.exitCode() != 0) {
                 if (logger.isWarnEnabled()) {
                     logger.warn("yt-dlp failed via proxy (exit code {}). Retrying without proxy once. Output: {}",
                             result.exitCode(), summarizeYtDlpOutput(result.stderr()));
                 }
-                result = executeYtDlp(buildYtDlpCommand(exeFile, youtubeUrl, null));
+                result = executeYtDlp(buildYtDlpCommand(ytDlpCmd, youtubeUrl, null));
             }
         } else {
             logger.warn("No proxy configured for yt-dlp. Direct request will be attempted.");
-            result = executeYtDlp(buildYtDlpCommand(exeFile, youtubeUrl, null));
+            result = executeYtDlp(buildYtDlpCommand(ytDlpCmd, youtubeUrl, null));
         }
 
         if (result.exitCode() != 0) {
@@ -280,9 +253,9 @@ public class YoutubeCaptionServiceImpl implements YoutubeCaptionService {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
-    private List<String> buildYtDlpCommand(File exeFile, String youtubeUrl, String proxyUrl) {
+    private List<String> buildYtDlpCommand(String ytDlpCmd, String youtubeUrl, String proxyUrl) {
         List<String> command = new ArrayList<>();
-        command.add(exeFile.getAbsolutePath());
+        command.add(ytDlpCmd);
         if (proxyUrl != null) {
             command.add("--proxy");
             command.add(proxyUrl);
