@@ -86,7 +86,7 @@ public class YoutubeCaptionServiceImpl implements YoutubeCaptionService {
                 proxyUrl = sb.toString();
             }
         }
-
+logger.info("Proxy URL: {}", proxyUrl);
 
         YtDlpExecutionResult result;
 
