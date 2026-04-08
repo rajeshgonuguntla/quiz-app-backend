@@ -41,7 +41,8 @@ public class YoutubeCaptionServiceImpl implements YoutubeCaptionService {
             ytDlpCmd = "yt-dlp";
         }
 
-        String proxyUrl = resolveYtDlpProxyUrl();
+       // String proxyUrl = resolveYtDlpProxyUrl();
+        String proxyUrl= "http://spt3g2wopk:eX3oNX6qdb_ri2k4nJ@gate.decodo.com:7000";
 
         YtDlpExecutionResult result;
 
