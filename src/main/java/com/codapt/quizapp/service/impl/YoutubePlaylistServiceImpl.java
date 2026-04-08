@@ -19,10 +19,11 @@ import java.util.concurrent.CompletableFuture;
 public class YoutubePlaylistServiceImpl implements YoutubePlaylistService {
 
     private static final Logger logger = LoggerFactory.getLogger(YoutubePlaylistServiceImpl.class);
-    private final String webshareUser = System.getenv("WEBSHARE_USERNAME");
-    private final String websharePass = System.getenv("WEBSHARE_PASSWORD");
-    private final String webshareHost = defaultIfBlank(System.getenv("WEBSHARE_PROXY_HOST"), "p.webshare.io");
-    private final String websharePort = defaultIfBlank(System.getenv("WEBSHARE_PROXY_PORT"), "80");
+    private final String proxyUser = System.getenv("PROXY_USER");
+    private final String proxyPass = System.getenv("PROXY_PASS");
+    private final String proxyHost = defaultIfBlank(System.getenv("PROXY_HOST"), "p.webshare.io");
+    private final String proxyPort = defaultIfBlank(System.getenv("PROXY_PORT"), "80");
+
 
     @Override
     public List<String> getVideoUrls(String playlistUrl) throws Exception {
@@ -47,10 +48,6 @@ public class YoutubePlaylistServiceImpl implements YoutubePlaylistService {
             String proxyUser = trimToNull(System.getenv("PROXY_USER"));
             String proxyPass = trimToNull(System.getenv("PROXY_PASS"));
 
-            if (proxyHost == null) proxyHost = webshareHost;
-            if (proxyPort == null) proxyPort = websharePort;
-            if (proxyUser == null) proxyUser = webshareUser;
-            if (proxyPass == null) proxyPass = websharePass;
 
             if (proxyHost != null && proxyPort != null) {
                 StringBuilder sb = new StringBuilder();

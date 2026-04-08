@@ -26,10 +26,10 @@ import java.util.concurrent.CompletableFuture;
 public class YoutubeCaptionServiceImpl implements YoutubeCaptionService {
 
     private static final Logger logger = LoggerFactory.getLogger(YoutubeCaptionServiceImpl.class);
-    private final String webshareUser = System.getenv("WEBSHARE_USERNAME");
-    private final String websharePass = System.getenv("WEBSHARE_PASSWORD");
-    private final String webshareHost = defaultIfBlank(System.getenv("WEBSHARE_PROXY_HOST"), "p.webshare.io");
-    private final String websharePort = defaultIfBlank(System.getenv("WEBSHARE_PROXY_PORT"), "80");
+    private final String proxyUser = System.getenv("PROXY_USER");
+    private final String proxyPass = System.getenv("PROXY_PASS");
+    private final String proxyHost = defaultIfBlank(System.getenv("PROXY_HOST"), "p.webshare.io");
+    private final String proxyPort = defaultIfBlank(System.getenv("PROXY_PORT"), "80");
 
     @Override
     public YoutubeCaptionDetails downloadCaptions(String youtubeUrl) throws Exception {
@@ -56,16 +56,16 @@ public class YoutubeCaptionServiceImpl implements YoutubeCaptionService {
 
             // If env vars not provided, fallback to the webshare values configured earlier
             if (proxyHost == null) {
-                proxyHost = webshareHost;
+                proxyHost = proxyHost;
             }
             if (proxyPort == null) {
-                proxyPort = websharePort;
+                proxyPort = proxyPort;
             }
             if (proxyUser == null) {
-                proxyUser = webshareUser;
+                proxyUser = proxyUser;
             }
             if (proxyPass == null) {
-                proxyPass = websharePass;
+                proxyPass = proxyPass;
             }
 
             if (proxyHost != null && proxyPort != null) {
