@@ -41,8 +41,52 @@ public class YoutubeCaptionServiceImpl implements YoutubeCaptionService {
             ytDlpCmd = "yt-dlp";
         }
 
-       // String proxyUrl = resolveYtDlpProxyUrl();
-        String proxyUrl= "http://spt3g2wopk:eX3oNX6qdb_ri2k4nJ@gate.decodo.com:7000";
+        // Build proxy URL dynamically. Priority:
+        // 1) Explicit PROXY_URL env var
+        // 2) PROXY_USER/PROXY_PASS/PROXY_HOST/PROXY_PORT (or use webshare* defaults defined above)
+        String proxyUrl = null;
+        String explicitProxy = trimToNull(System.getenv("PROXY_URL"));
+        if (explicitProxy != null) {
+            proxyUrl = explicitProxy;
+        } else {
+            String proxyHost = trimToNull(System.getenv("PROXY_HOST"));
+            String proxyPort = trimToNull(System.getenv("PROXY_PORT"));
+            String proxyUser = trimToNull(System.getenv("PROXY_USER"));
+            String proxyPass = trimToNull(System.getenv("PROXY_PASS"));
+
+            // If env vars not provided, fallback to the webshare values configured earlier
+            if (proxyHost == null) {
+                proxyHost = webshareHost;
+            }
+            if (proxyPort == null) {
+                proxyPort = websharePort;
+            }
+            if (proxyUser == null) {
+                proxyUser = webshareUser;
+            }
+            if (proxyPass == null) {
+                proxyPass = websharePass;
+            }
+
+            if (proxyHost != null && proxyPort != null) {
+                StringBuilder sb = new StringBuilder();
+                sb.append("http://");
+                if (proxyUser != null && proxyPass != null) {
+                    try {
+                        sb.append(URLEncoder.encode(proxyUser, StandardCharsets.UTF_8.name()))
+                                .append(":")
+                                .append(URLEncoder.encode(proxyPass, StandardCharsets.UTF_8.name()))
+                                .append("@");
+                    } catch (UnsupportedEncodingException e) {
+                        // UTF-8 should always be available; fall back to raw values if it isn't
+                        sb.append(proxyUser).append(":").append(proxyPass).append("@");
+                    }
+                }
+                sb.append(proxyHost).append(":").append(proxyPort);
+                proxyUrl = sb.toString();
+            }
+        }
+
 
         YtDlpExecutionResult result;
 
@@ -215,30 +259,6 @@ public class YoutubeCaptionServiceImpl implements YoutubeCaptionService {
         return id.isEmpty() ? null : id;
     }
 
-    private String resolveYtDlpProxyUrl() {
-        String explicitProxy = trimToNull(System.getenv("YTDLP_PROXY_URL"));
-        if (explicitProxy != null) {
-            return explicitProxy;
-        }
-
-        String httpsProxy = trimToNull(System.getenv("HTTPS_PROXY"));
-        if (httpsProxy != null) {
-            return httpsProxy;
-        }
-
-        String httpProxy = trimToNull(System.getenv("HTTP_PROXY"));
-        if (httpProxy != null) {
-            return httpProxy;
-        }
-
-        if (webshareUser != null && !webshareUser.isBlank() && websharePass != null && !websharePass.isBlank()) {
-            String encodedUser = URLEncoder.encode(webshareUser, StandardCharsets.UTF_8);
-            String encodedPass = URLEncoder.encode(websharePass, StandardCharsets.UTF_8);
-            return String.format("http://%s:%s@%s:%s", encodedUser, encodedPass, webshareHost, websharePort);
-        }
-
-        return null;
-    }
 
     private String defaultIfBlank(String value, String defaultValue) {
         String normalized = trimToNull(value);
