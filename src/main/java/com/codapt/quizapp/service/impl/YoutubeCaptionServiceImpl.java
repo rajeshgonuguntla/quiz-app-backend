@@ -54,19 +54,7 @@ public class YoutubeCaptionServiceImpl implements YoutubeCaptionService {
             String proxyUser = trimToNull(System.getenv("PROXY_USER"));
             String proxyPass = trimToNull(System.getenv("PROXY_PASS"));
 
-            // If env vars not provided, fallback to the webshare values configured earlier
-            if (proxyHost == null) {
-                proxyHost = proxyHost;
-            }
-            if (proxyPort == null) {
-                proxyPort = proxyPort;
-            }
-            if (proxyUser == null) {
-                proxyUser = proxyUser;
-            }
-            if (proxyPass == null) {
-                proxyPass = proxyPass;
-            }
+
 
             if (proxyHost != null && proxyPort != null) {
                 StringBuilder sb = new StringBuilder();
@@ -86,7 +74,7 @@ public class YoutubeCaptionServiceImpl implements YoutubeCaptionService {
                 proxyUrl = sb.toString();
             }
         }
-logger.info("Proxy URL: {}", proxyUrl);
+        logger.info("Proxy URL: {}", proxyUrl);
 
         YtDlpExecutionResult result;
 
@@ -281,6 +269,8 @@ logger.info("Proxy URL: {}", proxyUrl);
             command.add("--proxy");
             command.add(proxyUrl);
         }
+        command.add("--write-automatic-subs");
+        command.add("--skip-download");
         command.add("--dump-json");
         command.add(youtubeUrl);
         return command;
