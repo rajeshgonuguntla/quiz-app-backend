@@ -119,7 +119,7 @@ public class YoutubeCaptionServiceImpl implements YoutubeCaptionService {
 
         String cleanedCaptions = null;
 
-        if (subtitleUrl == null || subtitleUrl.isEmpty()) {
+        /*if (subtitleUrl == null || subtitleUrl.isEmpty()) {
             String videoId = extractYoutubeVideoId(youtubeUrl);
             if (videoId != null && !videoId.isEmpty()) {
                 YoutubeTranscriptApi youtubeTranscriptApi = TranscriptApiFactory.createDefault();
@@ -129,7 +129,7 @@ public class YoutubeCaptionServiceImpl implements YoutubeCaptionService {
             } else {
                 logger.warn("Could not extract video id from URL: {}", youtubeUrl);
             }
-        } else {
+        } else {*/
             logger.info("Captions found, downloading from: {}", subtitleUrl);
 
             StringBuilder captions = new StringBuilder();
@@ -143,7 +143,7 @@ public class YoutubeCaptionServiceImpl implements YoutubeCaptionService {
 
             logger.info("Captions downloaded successfully for video: {}", youtubeUrl);
             cleanedCaptions = cleanCaptionText(captions.toString());
-        }
+     //   }
 
         if (cleanedCaptions == null || cleanedCaptions.isBlank()) {
             logger.warn("No captions found for video: {}", youtubeUrl);
