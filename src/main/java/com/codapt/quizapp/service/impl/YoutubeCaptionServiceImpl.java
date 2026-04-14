@@ -4,21 +4,17 @@ import com.codapt.quizapp.dto.YoutubeCaptionDetails;
 import com.codapt.quizapp.service.YoutubeCaptionService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.github.thoroldvix.api.TranscriptContent;
-import io.github.thoroldvix.api.TranscriptApiFactory;
-import io.github.thoroldvix.api.YoutubeTranscriptApi;
-// ...existing code...
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-// ...existing code...
 import org.springframework.stereotype.Service;
 
 import java.io.*;
 import java.net.*;
-// ...existing code...
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 
@@ -49,12 +45,10 @@ public class YoutubeCaptionServiceImpl implements YoutubeCaptionService {
         if (explicitProxy != null) {
             proxyUrl = explicitProxy;
         } else {
-            String proxyHost = trimToNull(System.getenv("PROXY_HOST"));
-            String proxyPort = trimToNull(System.getenv("PROXY_PORT"));
-            String proxyUser = trimToNull(System.getenv("PROXY_USER"));
-            String proxyPass = trimToNull(System.getenv("PROXY_PASS"));
-
-
+            String proxyHost = trimToNull(this.proxyHost);
+            String proxyPort = trimToNull(this.proxyPort);
+            String proxyUser = trimToNull(this.proxyUser);
+            String proxyPass = trimToNull(this.proxyPass);
 
             if (proxyHost != null && proxyPort != null) {
                 StringBuilder sb = new StringBuilder();
@@ -74,7 +68,7 @@ public class YoutubeCaptionServiceImpl implements YoutubeCaptionService {
                 proxyUrl = sb.toString();
             }
         }
-        logger.info("Proxy URL: {}", proxyUrl);
+       // logger.info("Proxy URL: {}", proxyUrl);
 
         YtDlpExecutionResult result;
 
@@ -103,6 +97,8 @@ public class YoutubeCaptionServiceImpl implements YoutubeCaptionService {
         ObjectMapper mapper = new ObjectMapper();
         JsonNode root = mapper.readTree(extractJsonPayload(result.stdout()));
 
+      //  logger.info("JSON Payload: {}", root.toString());
+
         String videoTitle = root.path("title").asText("Unknown title");
         String channelName = root.path("channel").asText("Unknown channel");
         long durationSeconds = root.path("duration").asLong(0);
@@ -111,26 +107,15 @@ public class YoutubeCaptionServiceImpl implements YoutubeCaptionService {
         logger.info("Fetched YouTube metadata - title: '{}', channel: '{}', length: {}",
                 videoTitle, channelName, videoLength);
 
-        JsonNode subtitles = root.path("subtitles").path("en");
-        String subtitleUrl = null;
-        if (subtitles.isArray() && !subtitles.isEmpty()) {
-            subtitleUrl = subtitles.get(0).path("url").asText();
-        }
+        SubtitleSelection subtitleSelection = selectEnglishSubtitle(root);
+        String subtitleUrl = subtitleSelection.url();
 
         String cleanedCaptions = null;
 
-        /*if (subtitleUrl == null || subtitleUrl.isEmpty()) {
-            String videoId = extractYoutubeVideoId(youtubeUrl);
-            if (videoId != null && !videoId.isEmpty()) {
-                YoutubeTranscriptApi youtubeTranscriptApi = TranscriptApiFactory.createDefault();
-                TranscriptContent transcriptContent = youtubeTranscriptApi.getTranscript(videoId, "en");
-                cleanedCaptions = buildCaptionsFromTranscript(transcriptContent);
-                logger.info("Fetched transcript fallback using video id: {}", videoId);
-            } else {
-                logger.warn("Could not extract video id from URL: {}", youtubeUrl);
-            }
-        } else {*/
-            logger.info("Captions found, downloading from: {}", subtitleUrl);
+        if (subtitleUrl == null) {
+            logger.warn("No English subtitle URL found in yt-dlp metadata for video: {}", youtubeUrl);
+        } else {
+            logger.info("Using {} captions, downloading from: {}", subtitleSelection.source(), subtitleUrl);
 
             StringBuilder captions = new StringBuilder();
             try (BufferedReader subtitleReader = new BufferedReader(
@@ -143,7 +128,7 @@ public class YoutubeCaptionServiceImpl implements YoutubeCaptionService {
 
             logger.info("Captions downloaded successfully for video: {}", youtubeUrl);
             cleanedCaptions = cleanCaptionText(captions.toString());
-     //   }
+        }
 
         if (cleanedCaptions == null || cleanedCaptions.isBlank()) {
             logger.warn("No captions found for video: {}", youtubeUrl);
@@ -158,20 +143,58 @@ public class YoutubeCaptionServiceImpl implements YoutubeCaptionService {
         return new YoutubeCaptionDetails(cleanedCaptions, videoTitle, channelName, videoLength);
     }
 
-    private String buildCaptionsFromTranscript(TranscriptContent transcriptContent) {
-        if (transcriptContent == null || transcriptContent.getContent() == null || transcriptContent.getContent().isEmpty()) {
+    SubtitleSelection selectEnglishSubtitle(JsonNode root) {
+        String manualSubtitleUrl = extractSubtitleUrlForLanguage(root.path("subtitles"), "en");
+        if (manualSubtitleUrl != null) {
+            return new SubtitleSelection(manualSubtitleUrl, "manual");
+        }
+
+        String automaticSubtitleUrl = extractSubtitleUrlForLanguage(root.path("automatic_captions"), "en");
+        if (automaticSubtitleUrl != null) {
+            return new SubtitleSelection(automaticSubtitleUrl, "automatic");
+        }
+
+        return SubtitleSelection.none();
+    }
+
+    private String extractSubtitleUrlForLanguage(JsonNode captionRoot, String languagePrefix) {
+        if (captionRoot == null || !captionRoot.isObject()) {
             return null;
         }
 
-        StringBuilder transcript = new StringBuilder();
-        for (TranscriptContent.Fragment fragment : transcriptContent.getContent()) {
-            if (fragment != null && fragment.getText() != null && !fragment.getText().isBlank()) {
-                transcript.append(fragment.getText().trim()).append("\n");
+        JsonNode exactLanguage = captionRoot.path(languagePrefix);
+        String exactLanguageUrl = firstUrlFromTrackList(exactLanguage);
+        if (exactLanguageUrl != null) {
+            return exactLanguageUrl;
+        }
+
+        Iterator<Map.Entry<String, JsonNode>> fields = captionRoot.fields();
+        while (fields.hasNext()) {
+            Map.Entry<String, JsonNode> entry = fields.next();
+            if (entry.getKey() != null && entry.getKey().startsWith(languagePrefix)) {
+                String url = firstUrlFromTrackList(entry.getValue());
+                if (url != null) {
+                    return url;
+                }
             }
         }
 
-        String text = transcript.toString().trim();
-        return text.isEmpty() ? null : text;
+        return null;
+    }
+
+    private String firstUrlFromTrackList(JsonNode trackList) {
+        if (!trackList.isArray()) {
+            return null;
+        }
+
+        for (JsonNode track : trackList) {
+            String url = trimToNull(track.path("url").asText(null));
+            if (url != null) {
+                return url;
+            }
+        }
+
+        return null;
     }
 
     private String cleanCaptionText(String captionText) {
@@ -184,67 +207,6 @@ public class YoutubeCaptionServiceImpl implements YoutubeCaptionService {
                 .replaceAll("\\d{2}:\\d{2}:\\d{2}\\.\\d+ --> .*", "")
                 .replaceAll("<[^>]*+>", "")
                 .trim();
-    }
-
-    private String extractYoutubeVideoId(String youtubeUrl) {
-        if (youtubeUrl == null || youtubeUrl.trim().isEmpty()) {
-            return null;
-        }
-
-        try {
-            URI uri = URI.create(youtubeUrl.trim());
-            String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase();
-            String path = uri.getPath() == null ? "" : uri.getPath();
-
-            if (host.contains("youtu.be")) {
-                return sanitizeVideoId(path.startsWith("/") ? path.substring(1) : path);
-            }
-
-            if (path.startsWith("/watch")) {
-                String query = uri.getRawQuery();
-                if (query != null) {
-                    for (String param : query.split("&")) {
-                        String[] parts = param.split("=", 2);
-                        if (parts.length == 2 && "v".equals(parts[0])) {
-                            String value = URLDecoder.decode(parts[1], StandardCharsets.UTF_8);
-                            return sanitizeVideoId(value);
-                        }
-                    }
-                }
-            }
-
-            if (path.startsWith("/shorts/") || path.startsWith("/embed/") || path.startsWith("/v/")) {
-                String[] segments = path.split("/");
-                for (int i = 0; i < segments.length - 1; i++) {
-                    if ("shorts".equals(segments[i]) || "embed".equals(segments[i]) || "v".equals(segments[i])) {
-                        return sanitizeVideoId(segments[i + 1]);
-                    }
-                }
-            }
-        } catch (Exception ex) {
-            logger.warn("Failed to parse YouTube URL for video id: {}", youtubeUrl, ex);
-        }
-
-        return null;
-    }
-
-    private String sanitizeVideoId(String candidate) {
-        if (candidate == null) {
-            return null;
-        }
-
-        String id = candidate.trim();
-        int queryIndex = id.indexOf('?');
-        if (queryIndex >= 0) {
-            id = id.substring(0, queryIndex);
-        }
-
-        int fragmentIndex = id.indexOf('#');
-        if (fragmentIndex >= 0) {
-            id = id.substring(0, fragmentIndex);
-        }
-
-        return id.isEmpty() ? null : id;
     }
 
 
@@ -269,6 +231,7 @@ public class YoutubeCaptionServiceImpl implements YoutubeCaptionService {
             command.add("--proxy");
             command.add(proxyUrl);
         }
+        command.add("--write-subs");
         command.add("--write-automatic-subs");
         command.add("--skip-download");
         command.add("--dump-json");
@@ -363,5 +326,11 @@ public class YoutubeCaptionServiceImpl implements YoutubeCaptionService {
         }
 
         return String.format("%02d:%02d", minutes, seconds);
+    }
+
+    record SubtitleSelection(String url, String source) {
+        private static SubtitleSelection none() {
+            return new SubtitleSelection(null, "none");
+        }
     }
 }
