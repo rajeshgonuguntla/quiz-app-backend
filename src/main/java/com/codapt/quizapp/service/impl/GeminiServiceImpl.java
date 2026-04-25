@@ -5,10 +5,12 @@ import com.codapt.quizapp.util.PromptGenerator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Service;
 
 import java.util.Locale;
 
+@ConditionalOnExpression("'${spring.ai.google.genai.api-key}' != ''")
 @Service
 public class GeminiServiceImpl implements GeminiService {
 
@@ -51,6 +53,40 @@ public class GeminiServiceImpl implements GeminiService {
 
             logger.error("Error calling Gemini AI: {}", message, e);
             throw new RuntimeException("Failed to generate quiz from Gemini AI: " + message, e);
+        }
+    }
+
+    @Override
+    public String getCourseFromGemini(String transcript) {
+        logger.debug("Generating course prompt from transcript");
+
+        String geminiPrompt = promptGenerator.coursePromptTemplate;
+        geminiPrompt = geminiPrompt.replace("{{TRANSCRIPT_TEXT}}", transcript);
+        geminiPrompt = geminiPrompt.replace("{{MODULE_COUNT}}", "4");
+
+        logger.debug("Calling Gemini AI with generated course prompt");
+        return callGemini(geminiPrompt, "course");
+    }
+
+    private String callGemini(String prompt, String type) {
+        try {
+            String response = chatClient.prompt()
+                    .user(prompt)
+                    .call()
+                    .content();
+
+            logger.info("Successfully generated {} response from Gemini AI", type);
+            logger.debug("Response length: {} characters", response.length());
+            return response;
+        } catch (Exception e) {
+            String message = e.getMessage() == null ? "Unknown Gemini error" : e.getMessage();
+            if (isUnsupportedModelError(e)) {
+                logger.error("Gemini model is not available for this API key/project. Update spring.ai.google.genai.chat.options.model. Error: {}", message);
+                throw new RuntimeException("Configured Gemini model is not supported for this API key/project. Please update spring.ai.google.genai.chat.options.model.", e);
+            }
+
+            logger.error("Error calling Gemini AI for {}: {}", type, message, e);
+            throw new RuntimeException("Failed to generate " + type + " from Gemini AI: " + message, e);
         }
     }
 

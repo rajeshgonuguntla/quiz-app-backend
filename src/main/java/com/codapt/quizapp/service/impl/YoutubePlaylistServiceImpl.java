@@ -142,6 +142,7 @@ public class YoutubePlaylistServiceImpl implements YoutubePlaylistService {
         if (flatPlaylist) {
             command.add("--flat-playlist");
         }
+        command.add("--write-subs");
         command.add("--write-automatic-subs");
         command.add("--skip-download");
         command.add("--dump-json");

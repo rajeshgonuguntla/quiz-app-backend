@@ -1,0 +1,18 @@
+package com.codapt.quizapp.dto;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.util.List;
+
+@Data
+@AllArgsConstructor
+@NoArgsConstructor
+public class ModuleDto {
+    private String id;
+    private String title;
+    private String description;
+    private List<LessonDto> lessons;
+    private List<QuizDto> quiz;
+}
