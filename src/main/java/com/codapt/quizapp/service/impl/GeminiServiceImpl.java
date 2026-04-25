@@ -77,6 +77,7 @@ public class GeminiServiceImpl implements GeminiService {
 
             logger.info("Successfully generated {} response from Gemini AI", type);
             logger.debug("Response length: {} characters", response.length());
+            logger.info("Response from Gemini AI:", response);
             return response;
         } catch (Exception e) {
             String message = e.getMessage() == null ? "Unknown Gemini error" : e.getMessage();

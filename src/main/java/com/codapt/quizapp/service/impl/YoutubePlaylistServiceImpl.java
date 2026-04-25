@@ -21,8 +21,8 @@ public class YoutubePlaylistServiceImpl implements YoutubePlaylistService {
     private static final Logger logger = LoggerFactory.getLogger(YoutubePlaylistServiceImpl.class);
     private final String proxyUser = System.getenv("PROXY_USER");
     private final String proxyPass = System.getenv("PROXY_PASS");
-    private final String proxyHost = defaultIfBlank(System.getenv("PROXY_HOST"), "p.webshare.io");
-    private final String proxyPort = defaultIfBlank(System.getenv("PROXY_PORT"), "80");
+    private final String proxyHost = defaultIfBlank(System.getenv("PROXY_HOST"), "gate.decodo.com");
+    private final String proxyPort = defaultIfBlank(System.getenv("PROXY_PORT"), "7000");
 
 
     @Override

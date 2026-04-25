@@ -58,6 +58,7 @@ public class CourseServiceImpl implements CourseService {
         final CourseResponse courseResponse;
         try {
             String cleanJson = stripCodeFences(rawJson);
+            logger.info("Clean course JSON: {}", cleanJson);
             courseResponse = objectMapper.readValue(cleanJson, CourseResponse.class);
         } catch (Exception e) {
             logger.error("Failed to parse course JSON from Gemini response. Raw: {}", rawJson, e);

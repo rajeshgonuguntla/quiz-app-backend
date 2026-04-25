@@ -3,6 +3,7 @@ package com.codapt.quizapp.controller;
 import com.codapt.quizapp.dto.CourseGenerateRequest;
 import com.codapt.quizapp.dto.CourseResponse;
 import com.codapt.quizapp.service.CourseService;
+import com.codapt.quizapp.util.YouTubeUrlValidator;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
@@ -26,20 +27,24 @@ public class CourseController {
     }
 
     @PostMapping("/generate")
-    @Operation(summary = "Generate Course from YouTube URL",
-            description = "Receives a YouTube URL, extracts captions, and generates a structured course using Gemini AI")
+    @Operation(summary = "Generate Course from YouTube Playlist",
+            description = "Receives a YouTube playlist URL, extracts captions, and generates a structured course using Gemini AI")
     public CourseResponse generateCourse(@RequestBody CourseGenerateRequest request) {
         if (request == null || request.getYoutubeUrl() == null || request.getYoutubeUrl().trim().isEmpty()) {
-            logger.warn("Invalid request: YouTube URL is required");
-            throw new IllegalArgumentException("YouTube URL is required");
+            logger.warn("Invalid request: YouTube playlist URL is required");
+            throw new IllegalArgumentException("YouTube playlist URL is required");
         }
 
         String url = request.getYoutubeUrl().trim();
-        logger.info("Received course generation request for YouTube URL: {}", url);
+        
+        // Validate that the URL is a playlist and not a single video
+        YouTubeUrlValidator.validatePlaylistUrl(url);
+        
+        logger.info("Received course generation request for YouTube playlist: {}", url);
 
         CourseResponse response = courseService.generateCourse(url);
 
-        logger.info("Course generation completed for URL: {} - title: '{}', modules: {}",
+        logger.info("Course generation completed for playlist: {} - title: '{}', modules: {}",
                 url, response.getTitle(),
                 response.getModules() != null ? response.getModules().size() : 0);
 
