@@ -229,7 +229,8 @@ public class YoutubeCaptionServiceImpl implements YoutubeCaptionService {
     private List<String> buildYtDlpCommand(String ytDlpCmd, String youtubeUrl, String proxyUrl) {
         List<String> command = new ArrayList<>();
         command.add(ytDlpCmd);
-        command.add("-N 5"); // Use up to 5 concurrent connections for faster metadata retrieval
+        command.add("-N"); // Use up to 5 concurrent connections for faster metadata retrieval
+        command.add("4");
         if (proxyUrl != null) {
             command.add("--proxy");
             command.add(proxyUrl);
