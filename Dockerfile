@@ -27,17 +27,11 @@ EXPOSE 8080
 # Expose the JVM debug port so a remote debugger can attach (use with JAVA_DEBUG_OPTS)
 #EXPOSE 5005
 
-#ENV GEMINI_API_KEY=AIzaSyBiYCrm8hDfIWRHjmNhgL3qWPtEjCCYHXg
-#ENV GOOGLE_CLIENT_SECRET=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
-#ENV PROXY_PASS=Citrix2027!
-#ENV PROXY_HOST=gate.decodo.com
-#ENV PROXY_USER=rajeshgonuguntla384@gmail.com
-#ENV PROXY_PORT=7000
 
 
 # Allow enabling remote debugging by passing JAVA_DEBUG_OPTS at runtime.
 # Example: -e JAVA_DEBUG_OPTS='-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005'
 # Set default JVM memory options if not provided
-ENV JAVA_OPTS="-Xmx2g -Xms512m"
+ENV JAVA_OPTS="-Xms256m -Xmx384m"
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar /app/app.jar"]
 

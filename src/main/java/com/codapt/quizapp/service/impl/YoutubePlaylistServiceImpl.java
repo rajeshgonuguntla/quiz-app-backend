@@ -136,7 +136,7 @@ public class YoutubePlaylistServiceImpl implements YoutubePlaylistService {
         List<String> command = new ArrayList<>();
         command.add(ytDlpCmd);
         command.add("-N");
-        command.add("4");
+        command.add("10");
         if (proxyUrl != null) {
             command.add("--proxy");
             command.add(proxyUrl);
@@ -144,6 +144,8 @@ public class YoutubePlaylistServiceImpl implements YoutubePlaylistService {
         if (flatPlaylist) {
             command.add("--flat-playlist");
         }
+        command.add("--write-subs");
+        command.add("--write-auto-subs");
         command.add("--skip-download");
         command.add("--dump-json");
         command.add(targetUrl);
