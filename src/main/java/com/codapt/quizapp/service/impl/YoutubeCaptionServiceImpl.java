@@ -72,6 +72,8 @@ public class YoutubeCaptionServiceImpl implements YoutubeCaptionService {
 
         YtDlpExecutionResult result;
 
+        logger.info("proxyUrl: {}", proxyUrl);
+
         if (proxyUrl != null) {
             logger.info("Using proxy for yt-dlp request");
             result = executeYtDlp(buildYtDlpCommand(ytDlpCmd, youtubeUrl, proxyUrl));
@@ -227,12 +229,14 @@ public class YoutubeCaptionServiceImpl implements YoutubeCaptionService {
     private List<String> buildYtDlpCommand(String ytDlpCmd, String youtubeUrl, String proxyUrl) {
         List<String> command = new ArrayList<>();
         command.add(ytDlpCmd);
+        command.add("-N 5"); // Use up to 5 concurrent connections for faster metadata retrieval
         if (proxyUrl != null) {
             command.add("--proxy");
             command.add(proxyUrl);
         }
         command.add("--write-subs");
-        command.add("--write-automatic-subs");
+        command.add("--write-auto-subs");
+        command.add("--sub-langs en");
         command.add("--skip-download");
         command.add("--dump-json");
         command.add(youtubeUrl);

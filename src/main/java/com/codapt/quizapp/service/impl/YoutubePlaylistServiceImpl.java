@@ -135,6 +135,7 @@ public class YoutubePlaylistServiceImpl implements YoutubePlaylistService {
     private List<String> buildYtDlpCommand(String ytDlpCmd, String targetUrl, String proxyUrl, boolean flatPlaylist) {
         List<String> command = new ArrayList<>();
         command.add(ytDlpCmd);
+        command.add("-N 10");
         if (proxyUrl != null) {
             command.add("--proxy");
             command.add(proxyUrl);
@@ -143,7 +144,8 @@ public class YoutubePlaylistServiceImpl implements YoutubePlaylistService {
             command.add("--flat-playlist");
         }
         command.add("--write-subs");
-        command.add("--write-automatic-subs");
+        command.add("--write-auto-subs");
+        command.add("--sub-langs en");
         command.add("--skip-download");
         command.add("--dump-json");
         command.add(targetUrl);
