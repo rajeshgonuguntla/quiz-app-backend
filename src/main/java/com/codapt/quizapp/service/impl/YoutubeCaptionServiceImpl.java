@@ -236,7 +236,6 @@ public class YoutubeCaptionServiceImpl implements YoutubeCaptionService {
         }
         command.add("--write-subs");
         command.add("--write-auto-subs");
-        command.add("--sub-langs en");
         command.add("--skip-download");
         command.add("--dump-json");
         command.add(youtubeUrl);
