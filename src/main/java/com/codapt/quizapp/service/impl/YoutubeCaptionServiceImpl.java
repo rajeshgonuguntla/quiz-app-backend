@@ -235,6 +235,7 @@ public class YoutubeCaptionServiceImpl implements YoutubeCaptionService {
             command.add("--proxy");
             command.add(proxyUrl);
         }
+        command.add("--flat-playlist");
         command.add("--write-subs");
         command.add("--write-auto-subs");
         command.add("--skip-download");
