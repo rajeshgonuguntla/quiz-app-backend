@@ -76,7 +76,7 @@ public class YoutubePlaylistServiceImpl implements YoutubePlaylistService {
                     logger.warn("yt-dlp failed via proxy (exit code {}). Retrying without proxy once. Output: {}",
                             result.exitCode(), summarizeYtDlpOutput(result.stderr()));
                 }
-                result = executeYtDlp(buildYtDlpCommand(ytDlpCmd, playlistUrl, null, true));
+             //   result = executeYtDlp(buildYtDlpCommand(ytDlpCmd, playlistUrl, null, true));
             }
         } else {
             logger.warn("No proxy configured for yt-dlp. Direct request will be attempted.");

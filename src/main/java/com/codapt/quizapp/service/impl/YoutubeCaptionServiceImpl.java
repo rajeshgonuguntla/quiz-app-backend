@@ -82,7 +82,7 @@ public class YoutubeCaptionServiceImpl implements YoutubeCaptionService {
                     logger.warn("yt-dlp failed via proxy (exit code {}). Retrying without proxy once. Output: {}",
                             result.exitCode(), summarizeYtDlpOutput(result.stderr()));
                 }
-                result = executeYtDlp(buildYtDlpCommand(ytDlpCmd, youtubeUrl, null));
+               // result = executeYtDlp(buildYtDlpCommand(ytDlpCmd, youtubeUrl, null));
             }
         } else {
             logger.warn("No proxy configured for yt-dlp. Direct request will be attempted.");
