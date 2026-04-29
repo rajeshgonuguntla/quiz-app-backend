@@ -99,7 +99,7 @@ public class YoutubeCaptionServiceImpl implements YoutubeCaptionService {
         ObjectMapper mapper = new ObjectMapper();
         JsonNode root = mapper.readTree(extractJsonPayload(result.stdout()));
 
-      //  logger.info("JSON Payload: {}", root.toString());
+        logger.info("JSON Payload: {}", root.toString());
 
         String videoTitle = root.path("title").asText("Unknown title");
         String channelName = root.path("channel").asText("Unknown channel");
