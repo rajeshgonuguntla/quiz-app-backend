@@ -1,5 +1,7 @@
 package com.codapt.quizapp.service.impl;
 
+import com.codapt.quizapp.dto.PlaylistCaptionDetails;
+import com.codapt.quizapp.service.PlaylistCaptionService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -17,7 +19,7 @@ import java.util.concurrent.CompletableFuture;
  * Uses auto-generated subtitles with English language preference and playlist indexing.
  */
 @Service
-public class PlaylistCaptionServiceImpl {
+public class PlaylistCaptionServiceImpl implements PlaylistCaptionService {
 
     private static final Logger logger = LoggerFactory.getLogger(PlaylistCaptionServiceImpl.class);
 
@@ -25,7 +27,8 @@ public class PlaylistCaptionServiceImpl {
      * Downloads captions for all videos in a YouTube playlist.
      * Uses yt-dlp with: --write-auto-sub --sub-langs en --skip-download --dump-json
      */
-    public List<Map<String, Object>> downloadPlaylistCaptions(String playlistUrl) throws Exception {
+    @Override
+    public List<PlaylistCaptionDetails> downloadPlaylistCaptions(String playlistUrl) throws Exception {
         logger.info("Starting caption download for YouTube playlist: {}", playlistUrl);
 
         String ytDlpCmd = trimToNull(System.getenv("YTDLP_CMD"));
@@ -79,8 +82,8 @@ public class PlaylistCaptionServiceImpl {
         return command;
     }
 
-    private List<Map<String, Object>> parsePlaylistJsonOutput(String stdout) {
-        List<Map<String, Object>> playlistCaptions = new ArrayList<>();
+    private List<PlaylistCaptionDetails> parsePlaylistJsonOutput(String stdout) {
+        List<PlaylistCaptionDetails> playlistCaptions = new ArrayList<>();
         ObjectMapper mapper = new ObjectMapper();
 
         if (stdout == null || stdout.isBlank()) {
@@ -98,10 +101,10 @@ public class PlaylistCaptionServiceImpl {
                 try {
                     playlistIndex++;
                     JsonNode entry = mapper.readTree(line);
-                    Map<String, Object> captionDetails = extractVideoDetails(entry, playlistIndex);
+                    PlaylistCaptionDetails captionDetails = extractVideoDetails(entry, playlistIndex);
                     playlistCaptions.add(captionDetails);
                     logger.info("Processed video {}: {}", playlistIndex, 
-                            captionDetails.get("videoTitle"));
+                            captionDetails.getVideoTitle());
                 } catch (Exception e) {
                     logger.warn("Failed to parse entry {}", playlistIndex, e);
                 }
@@ -115,7 +118,7 @@ public class PlaylistCaptionServiceImpl {
         return playlistCaptions;
     }
 
-    private Map<String, Object> extractVideoDetails(JsonNode entry, int playlistIndex) throws IOException {
+    private PlaylistCaptionDetails extractVideoDetails(JsonNode entry, int playlistIndex) throws IOException {
         String videoId = entry.path("id").asText(null);
         String videoTitle = entry.path("title").asText("Unknown title");
         String channelName = entry.path("channel").asText("Unknown channel");
@@ -125,14 +128,14 @@ public class PlaylistCaptionServiceImpl {
         
         String caption = extractAndCleanCaption(entry);
 
-        Map<String, Object> details = new LinkedHashMap<>();
-        details.put("videoId", videoId);
-        details.put("videoUrl", videoUrl);
-        details.put("caption", caption);
-        details.put("videoTitle", videoTitle);
-        details.put("channelName", channelName);
-        details.put("videoLength", videoLength);
-        details.put("playlistIndex", playlistIndex);
+        PlaylistCaptionDetails details = new PlaylistCaptionDetails();
+        details.setVideoId(videoId);
+        details.setVideoUrl(videoUrl);
+        details.setCaption(caption);
+        details.setVideoTitle(videoTitle);
+        details.setChannelName(channelName);
+        details.setVideoLength(videoLength);
+        details.setPlaylistIndex(playlistIndex);
         
         return details;
     }

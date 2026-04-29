@@ -1,6 +1,7 @@
 package com.codapt.quizapp.service.impl;
 
 import com.codapt.quizapp.dto.CourseResponse;
+import com.codapt.quizapp.dto.PlaylistCaptionDetails;
 import com.codapt.quizapp.service.CourseService;
 import com.codapt.quizapp.service.GeminiService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -12,7 +13,6 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.Map;
 
 @ConditionalOnExpression("'${spring.ai.google.genai.api-key}' != ''")
 @Service
@@ -36,7 +36,7 @@ public class CourseServiceImpl implements CourseService {
     public CourseResponse generateCourse(String playlistUrl) {
         logger.info("Starting course generation for playlist: {}", playlistUrl);
 
-        final List<Map<String, Object>> playlistCaptions;
+        final List<PlaylistCaptionDetails> playlistCaptions;
         try {
             playlistCaptions = playlistCaptionService.downloadPlaylistCaptions(playlistUrl);
         } catch (Exception e) {
@@ -54,13 +54,13 @@ public class CourseServiceImpl implements CourseService {
         // Combine captions from all videos in the playlist
         StringBuilder combinedCaptions = new StringBuilder();
         String channelName = null;
-        for (Map<String, Object> video : playlistCaptions) {
-            String caption = (String) video.get("caption");
+        for (PlaylistCaptionDetails video : playlistCaptions) {
+            String caption = video.getCaption();
             if (caption != null && !caption.isBlank()) {
                 combinedCaptions.append(caption).append("\n\n");
             }
             if (channelName == null) {
-                channelName = (String) video.get("channelName");
+                channelName = video.getChannelName();
             }
         }
 
@@ -83,10 +83,10 @@ public class CourseServiceImpl implements CourseService {
         }
 
         // Get first video details for metadata
-        Map<String, Object> firstVideo = playlistCaptions.get(0);
-        courseResponse.setVideoTitle((String) firstVideo.get("videoTitle"));
-        courseResponse.setChannelName(channelName != null ? channelName : (String) firstVideo.get("channelName"));
-        courseResponse.setVideoLength((String) firstVideo.get("videoLength"));
+        PlaylistCaptionDetails firstVideo = playlistCaptions.get(0);
+        courseResponse.setVideoTitle(firstVideo.getVideoTitle());
+        courseResponse.setChannelName(channelName != null ? channelName : firstVideo.getChannelName());
+        courseResponse.setVideoLength(firstVideo.getVideoLength());
         courseResponse.setDate(LocalDate.now().format(DateTimeFormatter.ofPattern("M/d/yyyy")));
 
         logger.info("Course generation completed for playlist: {} - title: '{}', modules: {}, videos processed: {}",
