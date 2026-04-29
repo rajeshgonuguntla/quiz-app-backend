@@ -1,10 +1,8 @@
 package com.codapt.quizapp.service.impl;
 
 import com.codapt.quizapp.dto.CourseResponse;
-import com.codapt.quizapp.dto.YoutubeCaptionDetails;
 import com.codapt.quizapp.service.CourseService;
 import com.codapt.quizapp.service.GeminiService;
-import com.codapt.quizapp.service.YoutubeCaptionService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,6 +11,8 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.Map;
 
 @ConditionalOnExpression("'${spring.ai.google.genai.api-key}' != ''")
 @Service
@@ -20,38 +20,55 @@ public class CourseServiceImpl implements CourseService {
 
     private static final Logger logger = LoggerFactory.getLogger(CourseServiceImpl.class);
 
-    private final YoutubeCaptionService youtubeCaptionService;
+    private final PlaylistCaptionServiceImpl playlistCaptionService;
     private final GeminiService geminiService;
     private final ObjectMapper objectMapper;
 
-    public CourseServiceImpl(YoutubeCaptionService youtubeCaptionService,
+    public CourseServiceImpl(PlaylistCaptionServiceImpl playlistCaptionService,
                              GeminiService geminiService,
                              ObjectMapper objectMapper) {
-        this.youtubeCaptionService = youtubeCaptionService;
+        this.playlistCaptionService = playlistCaptionService;
         this.geminiService = geminiService;
         this.objectMapper = objectMapper;
     }
 
     @Override
-    public CourseResponse generateCourse(String youtubeUrl) {
-        logger.info("Starting course generation for URL: {}", youtubeUrl);
+    public CourseResponse generateCourse(String playlistUrl) {
+        logger.info("Starting course generation for playlist: {}", playlistUrl);
 
-        final YoutubeCaptionDetails captionDetails;
+        final List<Map<String, Object>> playlistCaptions;
         try {
-            captionDetails = youtubeCaptionService.downloadCaptions(youtubeUrl);
+            playlistCaptions = playlistCaptionService.downloadPlaylistCaptions(playlistUrl);
         } catch (Exception e) {
-            logger.error("Failed to download captions for URL: {}", youtubeUrl, e);
-            throw new RuntimeException("Failed to download captions from YouTube: " + e.getMessage(), e);
+            logger.error("Failed to download captions for playlist: {}", playlistUrl, e);
+            throw new RuntimeException("Failed to download captions from YouTube playlist: " + e.getMessage(), e);
         }
 
-        logger.info("Captions downloaded for URL: {} - title: '{}', channel: '{}'",
-                youtubeUrl, captionDetails.getVideoTitle(), captionDetails.getChannelName());
+        if (playlistCaptions == null || playlistCaptions.isEmpty()) {
+            logger.error("No videos found in playlist: {}", playlistUrl);
+            throw new RuntimeException("Playlist is empty or could not be processed");
+        }
+
+        logger.info("Downloaded captions for {} videos from playlist: {}", playlistCaptions.size(), playlistUrl);
+
+        // Combine captions from all videos in the playlist
+        StringBuilder combinedCaptions = new StringBuilder();
+        String channelName = null;
+        for (Map<String, Object> video : playlistCaptions) {
+            String caption = (String) video.get("caption");
+            if (caption != null && !caption.isBlank()) {
+                combinedCaptions.append(caption).append("\n\n");
+            }
+            if (channelName == null) {
+                channelName = (String) video.get("channelName");
+            }
+        }
 
         String rawJson;
         try {
-            rawJson = geminiService.getCourseFromGemini(captionDetails.getCaption());
+            rawJson = geminiService.getCourseFromGemini(combinedCaptions.toString());
         } catch (Exception e) {
-            logger.error("Failed to generate course from Gemini for URL: {}", youtubeUrl, e);
+            logger.error("Failed to generate course from Gemini for playlist: {}", playlistUrl, e);
             throw new RuntimeException("Failed to generate course: " + e.getMessage(), e);
         }
 
@@ -65,14 +82,17 @@ public class CourseServiceImpl implements CourseService {
             throw new RuntimeException("Failed to parse generated course structure: " + e.getMessage(), e);
         }
 
-        courseResponse.setVideoTitle(captionDetails.getVideoTitle());
-        courseResponse.setChannelName(captionDetails.getChannelName());
-        courseResponse.setVideoLength(captionDetails.getVideoLength());
+        // Get first video details for metadata
+        Map<String, Object> firstVideo = playlistCaptions.get(0);
+        courseResponse.setVideoTitle((String) firstVideo.get("videoTitle"));
+        courseResponse.setChannelName(channelName != null ? channelName : (String) firstVideo.get("channelName"));
+        courseResponse.setVideoLength((String) firstVideo.get("videoLength"));
         courseResponse.setDate(LocalDate.now().format(DateTimeFormatter.ofPattern("M/d/yyyy")));
 
-        logger.info("Course generation completed for URL: {} - title: '{}', modules: {}",
-                youtubeUrl, courseResponse.getTitle(),
-                courseResponse.getModules() != null ? courseResponse.getModules().size() : 0);
+        logger.info("Course generation completed for playlist: {} - title: '{}', modules: {}, videos processed: {}",
+                playlistUrl, courseResponse.getTitle(),
+                courseResponse.getModules() != null ? courseResponse.getModules().size() : 0,
+                playlistCaptions.size());
 
         return courseResponse;
     }
