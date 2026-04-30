@@ -44,14 +44,14 @@ public class PlaylistCaptionServiceImpl implements PlaylistCaptionService {
             result = executeYtDlp(buildPlaylistCaptionCommand(ytDlpCmd, playlistUrl, proxyUrl));
             if (result.exitCode() != 0) {
                 logger.warn("yt-dlp failed via proxy. Retrying without proxy.");
-               // result = executeYtDlp(buildPlaylistCaptionCommand(ytDlpCmd, playlistUrl, null));
+                result = executeYtDlp(buildPlaylistCaptionCommand(ytDlpCmd, playlistUrl, null));
             }
         } else {
             logger.warn("No proxy configured. Direct request will be attempted.");
             result = executeYtDlp(buildPlaylistCaptionCommand(ytDlpCmd, playlistUrl, null));
         }
 
-        logger.info("Result from YT-DLP command: {}", result.toString());
+        logger.info("Result from YT-DLP command: {}", result);
 
         if (result.exitCode() != 0) {
             logger.error("yt-dlp failed with exit code {}", result.exitCode());
@@ -73,7 +73,7 @@ public class PlaylistCaptionServiceImpl implements PlaylistCaptionService {
         
         command.add("-N");
         command.add("10");
-        command.add("--flat-playlist");
+        // Removed --flat-playlist to get full video data including subtitles/captions
         command.add("--write-auto-sub");
         command.add("--sub-langs");
         command.add("en");
@@ -144,43 +144,88 @@ public class PlaylistCaptionServiceImpl implements PlaylistCaptionService {
 
     private String extractAndCleanCaption(JsonNode entry) {
         try {
-            JsonNode subtitles = entry.path("subtitles");
-            if (subtitles.isObject()) {
-                JsonNode enSubtitles = subtitles.path("en");
-                if (enSubtitles.isArray() && enSubtitles.size() > 0) {
-                    String url = enSubtitles.get(0).path("url").asText(null);
-                    if (url != null) {
-                        return downloadAndCleanCaption(url);
-                    }
-                }
+            String videoId = entry.path("id").asText();
+            
+            // Try English subtitles first
+            String captionUrl = extractCaptionUrl(entry.path("subtitles"), "en", videoId, "English subtitles");
+            if (captionUrl != null) {
+                return downloadAndCleanCaption(captionUrl);
             }
 
-            JsonNode automaticCaptions = entry.path("automatic_captions");
-            if (automaticCaptions.isObject()) {
-                JsonNode enCaptions = automaticCaptions.path("en");
-                if (enCaptions.isArray() && enCaptions.size() > 0) {
-                    String url = enCaptions.get(0).path("url").asText(null);
-                    if (url != null) {
-                        return downloadAndCleanCaption(url);
-                    }
-                }
+            // Try automatic captions for English
+            captionUrl = extractCaptionUrl(entry.path("automatic_captions"), "en", videoId, "automatic captions");
+            if (captionUrl != null) {
+                return downloadAndCleanCaption(captionUrl);
             }
 
+            // Try any available language from subtitles
+            captionUrl = extractFirstAvailableCaptionUrl(entry.path("subtitles"), videoId, "alternative language subtitles");
+            if (captionUrl != null) {
+                return downloadAndCleanCaption(captionUrl);
+            }
+
+            // Try any available language from automatic captions
+            captionUrl = extractFirstAvailableCaptionUrl(entry.path("automatic_captions"), videoId, "alternative language automatic captions");
+            if (captionUrl != null) {
+                return downloadAndCleanCaption(captionUrl);
+            }
+
+            logger.debug("No captions available for video {}", videoId);
             return "No captions available";
         } catch (Exception e) {
-            logger.warn("Error extracting captions", e);
+            logger.warn("Error extracting captions for video {}", entry.path("id").asText(), e);
             return "Error extracting captions";
         }
     }
 
+    private String extractCaptionUrl(JsonNode captionNode, String language, String videoId, String description) {
+        if (captionNode.isObject()) {
+            JsonNode langCaptions = captionNode.path(language);
+            if (langCaptions.isArray() && !langCaptions.isEmpty()) {
+                String url = langCaptions.get(0).path("url").asText(null);
+                if (url != null) {
+                    logger.debug("Found {} for video {}", description, videoId);
+                    return url;
+                }
+            }
+        }
+        return null;
+    }
+
+    private String extractFirstAvailableCaptionUrl(JsonNode captionNode, String videoId, String description) {
+        if (captionNode.isObject()) {
+            for (JsonNode langCaptions : captionNode) {
+                if (langCaptions.isArray() && !langCaptions.isEmpty()) {
+                    String url = langCaptions.get(0).path("url").asText(null);
+                    if (url != null) {
+                        logger.debug("Found {} for video {}", description, videoId);
+                        return url;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
     private String downloadAndCleanCaption(String url) throws IOException {
         StringBuilder captions = new StringBuilder();
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(URI.create(url).toURL().openStream()))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                captions.append(line).append("\n");
+        try {
+            URLConnection connection = URI.create(url).toURL().openConnection();
+            connection.setConnectTimeout(10000); // 10 second timeout
+            connection.setReadTimeout(10000);
+            
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
+                String line;
+                int lineCount = 0;
+                while ((line = reader.readLine()) != null && lineCount < 10000) { // Limit to prevent memory issues
+                    captions.append(line).append("\n");
+                    lineCount++;
+                }
             }
+        } catch (Exception e) {
+            logger.warn("Failed to download caption from URL: {}", url, e);
+            throw new IOException("Failed to download captions", e);
         }
         return cleanCaptionText(captions.toString());
     }
@@ -211,14 +256,10 @@ public class PlaylistCaptionServiceImpl implements PlaylistCaptionService {
             StringBuilder sb = new StringBuilder();
             sb.append("http://");
             if (proxyUser != null && proxyPass != null) {
-                try {
-                    sb.append(URLEncoder.encode(proxyUser, StandardCharsets.UTF_8.name()))
-                            .append(":")
-                            .append(URLEncoder.encode(proxyPass, StandardCharsets.UTF_8.name()))
-                            .append("@");
-                } catch (UnsupportedEncodingException e) {
-                    sb.append(proxyUser).append(":").append(proxyPass).append("@");
-                }
+                sb.append(URLEncoder.encode(proxyUser, StandardCharsets.UTF_8))
+                        .append(":")
+                        .append(URLEncoder.encode(proxyPass, StandardCharsets.UTF_8))
+                        .append("@");
             }
             sb.append(proxyHost).append(":").append(proxyPort);
             return sb.toString();
