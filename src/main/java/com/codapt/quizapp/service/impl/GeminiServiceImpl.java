@@ -64,7 +64,7 @@ public class GeminiServiceImpl implements GeminiService {
         geminiPrompt = geminiPrompt.replace("{{TRANSCRIPT_TEXT}}", transcript);
         geminiPrompt = geminiPrompt.replace("{{MODULE_COUNT}}", "4");
 
-        logger.debug("Calling Gemini AI with generated course prompt");
+        logger.debug("Calling Gemini AI with generated course prompt: {}",geminiPrompt);
         return callGemini(geminiPrompt, "course");
     }
 
