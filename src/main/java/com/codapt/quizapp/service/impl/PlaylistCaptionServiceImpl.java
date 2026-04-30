@@ -44,7 +44,7 @@ public class PlaylistCaptionServiceImpl implements PlaylistCaptionService {
             result = executeYtDlp(buildPlaylistCaptionCommand(ytDlpCmd, playlistUrl, proxyUrl));
             if (result.exitCode() != 0) {
                 logger.warn("yt-dlp failed via proxy. Retrying without proxy.");
-                result = executeYtDlp(buildPlaylistCaptionCommand(ytDlpCmd, playlistUrl, null));
+               // result = executeYtDlp(buildPlaylistCaptionCommand(ytDlpCmd, playlistUrl, null));
             }
         } else {
             logger.warn("No proxy configured. Direct request will be attempted.");

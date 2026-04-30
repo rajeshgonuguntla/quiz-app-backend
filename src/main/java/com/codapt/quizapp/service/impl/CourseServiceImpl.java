@@ -56,6 +56,10 @@ public class CourseServiceImpl implements CourseService {
         String channelName = null;
         for (PlaylistCaptionDetails video : playlistCaptions) {
             String caption = video.getCaption();
+            logger.info("Processing video: '{}' - caption length: {}, channel: '{}'",
+                    video.getVideoTitle(),
+                    caption != null ? caption.length() : 0,
+                    video.getChannelName());
             if (caption != null && !caption.isBlank()) {
                 combinedCaptions.append(caption).append("\n\n");
             }
