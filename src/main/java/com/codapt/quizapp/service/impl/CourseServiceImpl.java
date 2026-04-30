@@ -60,6 +60,10 @@ public class CourseServiceImpl implements CourseService {
                     video.getVideoTitle(),
                     caption != null ? caption.length() : 0,
                     video.getChannelName());
+            logger.info("Caption: '{}' - caption length: {}, title: '{}'",
+                    video.getCaption(),
+                    caption != null ? caption.length() : 0,
+                    video.getVideoTitle());
             if (caption != null && !caption.isBlank()) {
                 combinedCaptions.append(caption).append("\n\n");
             }
