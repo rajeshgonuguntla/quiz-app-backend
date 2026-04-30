@@ -51,6 +51,8 @@ public class PlaylistCaptionServiceImpl implements PlaylistCaptionService {
             result = executeYtDlp(buildPlaylistCaptionCommand(ytDlpCmd, playlistUrl, null));
         }
 
+        logger.info("Result from YT-DLP command: {}", result.toString());
+
         if (result.exitCode() != 0) {
             logger.error("yt-dlp failed with exit code {}", result.exitCode());
             throw new IllegalStateException("Failed to retrieve playlist from yt-dlp");
