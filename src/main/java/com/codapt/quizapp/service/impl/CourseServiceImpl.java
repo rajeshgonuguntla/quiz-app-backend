@@ -49,6 +49,7 @@ public class CourseServiceImpl implements CourseService {
             throw new RuntimeException("Playlist is empty or could not be processed");
         }
 
+        logger.info("Successfully downloaded captions : {}", playlistCaptions);
         logger.info("Downloaded captions for {} videos from playlist: {}", playlistCaptions.size(), playlistUrl);
 
         // Combine captions from all videos in the playlist
