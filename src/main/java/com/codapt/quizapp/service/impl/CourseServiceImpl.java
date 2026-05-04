@@ -75,6 +75,7 @@ public class CourseServiceImpl implements CourseService {
 
         String rawJson;
         try {
+            logger.info("combined captions : {}", combinedCaptions.toString());
             rawJson = geminiService.getCourseFromGemini(combinedCaptions.toString());
         } catch (Exception e) {
             logger.error("Failed to generate course from Gemini for playlist: {}", playlistUrl, e);
