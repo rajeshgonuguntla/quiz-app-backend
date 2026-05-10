@@ -13,6 +13,7 @@ import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Service for downloading captions from YouTube playlists using yt-dlp.
@@ -45,7 +46,7 @@ public class PlaylistCaptionServiceImpl implements PlaylistCaptionService {
             result = executeYtDlp(buildPlaylistCaptionCommand(ytDlpCmd, playlistUrl, proxyUrl));
             if (result.exitCode() != 0) {
                 logger.warn("yt-dlp failed via proxy. Retrying without proxy.");
-               // result = executeYtDlp(buildPlaylistCaptionCommand(ytDlpCmd, playlistUrl, null));
+                result = executeYtDlp(buildPlaylistCaptionCommand(ytDlpCmd, playlistUrl, null));
             }
         } else {
             logger.warn("No proxy configured. Direct request will be attempted.");
@@ -74,6 +75,8 @@ public class PlaylistCaptionServiceImpl implements PlaylistCaptionService {
         
         command.add("-N");
         command.add("10");
+        command.add("--playlist-items");
+        command.add("1-");
         // Removed --flat-playlist to get full video data including subtitles/captions
         command.add("--write-auto-sub");
         command.add("--sub-langs");
@@ -275,7 +278,13 @@ public class PlaylistCaptionServiceImpl implements PlaylistCaptionService {
         CompletableFuture<String> stdoutFuture = CompletableFuture.supplyAsync(() -> readStream(process.getInputStream()));
         CompletableFuture<String> stderrFuture = CompletableFuture.supplyAsync(() -> readStream(process.getErrorStream()));
 
-        int exitCode = process.waitFor();
+        boolean finished = process.waitFor(10, TimeUnit.MINUTES);
+        if (!finished) {
+            logger.warn("yt-dlp process timed out after 10 minutes, destroying process");
+            process.destroyForcibly();
+            throw new InterruptedException("yt-dlp process timed out");
+        }
+        int exitCode = process.exitValue();
         try {
             String stdout = stdoutFuture.get();
             String stderr = stderrFuture.get();
