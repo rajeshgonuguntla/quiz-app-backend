@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.*;
@@ -23,6 +24,12 @@ import java.util.concurrent.TimeUnit;
 public class PlaylistCaptionServiceImpl implements PlaylistCaptionService {
 
     private static final Logger logger = LoggerFactory.getLogger(PlaylistCaptionServiceImpl.class);
+
+    @Value("${ytdlp.timeout-minutes:30}")
+    private int ytDlpTimeoutMinutes;
+
+    @Value("${ytdlp.max-playlist-videos:100}")
+    private int maxPlaylistVideos;
 
     /**
      * Downloads captions for all videos in a YouTube playlist.
@@ -104,6 +111,12 @@ public class PlaylistCaptionServiceImpl implements PlaylistCaptionService {
                 line = line.trim();
                 if (line.isEmpty()) continue;
 
+                // Check if we've reached the maximum number of videos to process
+                if (playlistIndex >= maxPlaylistVideos) {
+                    logger.info("Reached maximum playlist video limit of {}. Stopping processing.", maxPlaylistVideos);
+                    break;
+                }
+
                 try {
                     playlistIndex++;
                     JsonNode entry = mapper.readTree(line);
@@ -120,7 +133,7 @@ public class PlaylistCaptionServiceImpl implements PlaylistCaptionService {
             throw new RuntimeException("Failed to parse playlist output", e);
         }
 
-        logger.info("Processed {} videos from playlist", playlistCaptions.size());
+        logger.info("Processed {} videos from playlist (limit: {})", playlistCaptions.size(), maxPlaylistVideos);
         return playlistCaptions;
     }
 
@@ -278,9 +291,9 @@ public class PlaylistCaptionServiceImpl implements PlaylistCaptionService {
         CompletableFuture<String> stdoutFuture = CompletableFuture.supplyAsync(() -> readStream(process.getInputStream()));
         CompletableFuture<String> stderrFuture = CompletableFuture.supplyAsync(() -> readStream(process.getErrorStream()));
 
-        boolean finished = process.waitFor(10, TimeUnit.MINUTES);
+        boolean finished = process.waitFor(ytDlpTimeoutMinutes, TimeUnit.MINUTES);
         if (!finished) {
-            logger.warn("yt-dlp process timed out after 10 minutes, destroying process");
+            logger.warn("yt-dlp process timed out after {} minutes, destroying process", ytDlpTimeoutMinutes);
             process.destroyForcibly();
             throw new InterruptedException("yt-dlp process timed out");
         }
