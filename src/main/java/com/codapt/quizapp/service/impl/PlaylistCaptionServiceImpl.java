@@ -52,8 +52,7 @@ public class PlaylistCaptionServiceImpl implements PlaylistCaptionService {
             logger.info("Using proxy for yt-dlp playlist caption download");
             result = executeYtDlp(buildPlaylistCaptionCommand(ytDlpCmd, playlistUrl, proxyUrl));
             if (result.exitCode() != 0) {
-                logger.warn("yt-dlp failed via proxy. Retrying without proxy.");
-                result = executeYtDlp(buildPlaylistCaptionCommand(ytDlpCmd, playlistUrl, null));
+                logger.warn("yt-dlp failed via proxy. Exit code: {}. Stderr: {}.", result.exitCode(), result.stderr());
             }
         } else {
             logger.warn("No proxy configured. Direct request will be attempted.");
@@ -112,10 +111,10 @@ public class PlaylistCaptionServiceImpl implements PlaylistCaptionService {
                 if (line.isEmpty()) continue;
 
                 // Check if we've reached the maximum number of videos to process
-                if (playlistIndex >= maxPlaylistVideos) {
+              /*  if (playlistIndex >= maxPlaylistVideos) {
                     logger.info("Reached maximum playlist video limit of {}. Stopping processing.", maxPlaylistVideos);
                     break;
-                }
+                }*/
 
                 try {
                     playlistIndex++;

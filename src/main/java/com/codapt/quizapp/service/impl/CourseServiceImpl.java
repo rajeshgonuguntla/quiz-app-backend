@@ -119,7 +119,7 @@ public class CourseServiceImpl implements CourseService {
 
             // Step 2: Combine batch summaries into final course structure
             String combinedContent = captionBatchProcessor.combineBatchSummaries(batchSummaries);
-            logger.info("Successfully combined all batch summaries into final course content");
+            logger.info("Successfully combined all batch summaries into final course content: {}", combinedContent);
             
             return combinedContent;
         } catch (Exception e) {
